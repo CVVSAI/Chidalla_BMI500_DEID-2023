@@ -1,5 +1,8 @@
 import re
 import sys
+import chardet
+import cProfile, snakeviz
+
 phone_pattern ='(\d{3}[-\.\s/]??\d{3}[-\.\s/]??\d{4}|\(\d{3}\)\s*\d{3}[-\.\s/]??\d{4})'
 
 # compiling the reg_ex would save sime time!
@@ -47,7 +50,7 @@ def check_for_phone(patient,note,chunk, output_handle):
 
             
             
-def deid_phone(text_path= 'id.text', output_path = 'phone.phi'):
+def deid_name(text_path= 'id.text', output_path = 'name.phi'):
     """
     Inputs: 
         - text_path: path to the file containing patient records
@@ -96,14 +99,60 @@ def deid_phone(text_path= 'id.text', output_path = 'phone.phi'):
                 if len(record_end):
                     # Now we have a full patient note stored in `chunk`, along with patient numerb and note number
                     # pass all to check_for_phone to find any phone numbers in note.
-                    check_for_phone(patient,note,chunk.strip(), output_file)
+                    check_for_abbrev(patient,note,chunk.strip(), output_file)
                     
                     # initialize the chunk for the next note to be read
                     chunk = ''
-                
+
+
+#Detect the character encoding of a text file.
+def detect_encoding(filename):
+    with open(filename, 'rb') as f:
+        data = f.read()
+    result = chardet.detect(data)
+    if result['encoding'] is None:
+        return None
+    return result['encoding']
+
+#Extract strings from a text file in a robust way using encoding detection.
+def get_string_repo(file_path):
+    string_repo = [' ']
+    encoding = detect_encoding(file_path)
+    with open(file_path, 'r', encoding=encoding) as f:
+        string_repo.extend(
+            [line for line in f.read().split('\n') if line])
+
+    string_repo = [name for name in string_repo if name.isalpha()]
+    string_repo = [name.lower() for name in string_repo]
+    string_repo.sort(key=len, reverse=True)
+    string_repo = [name.replace('|', '') for name in string_repo]
+    string_repo = [name for name in string_repo if len(name) > 1]
+    return string_repo
+
+abbrevations_file = 'C:\\Users\\Varshith\\Desktop\\homeworks\\DEID-2023\\lists\\us_states_abbre.txt' 
+fullnames_file= 'C:\\Users\\Varshith\\Desktop\\homeworks\\DEID-2023\\lists\\us_states.txt'
+
+def check_for_abbrev(patient, note, chunk, output_handle):
+    offset = 27
+    output_handle.write('Patient {}\tNote {}\n'.format(patient, note))
+    abbrevations = get_string_repo(abbrevations_file)
+    full_name = get_string_repo(fullnames_file)
+    final_repo = abbrevations + full_name
+    for name in final_repo:
+        name = name.lower()
+        name_pattern = r'\b{}\b'.format(name)
+        name_reg = re.compile(name_pattern)
+        for match in name_reg.finditer(chunk):
+            print(patient, note, end=' ')
+            print((match.start()-offset), match.end()-offset, match.group())
+            result = str(match.start()-offset) + ' ' + \
+                str(match.start()-offset) + ' ' + str(match.end()-offset)
+            output_handle.write(result+'\n')
+
+
+
 if __name__== "__main__":
-        
     
-    
-    deid_phone(sys.argv[1], sys.argv[2])
+    deid_name(sys.argv[1], sys.argv[2])
+    cProfile.run('deid_name()', 'output.cprof')
     
